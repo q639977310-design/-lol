@@ -1,8 +1,3 @@
-pcall(function()
-    loadstring(game:HttpGet('loadstring(game:HttpGet("https://raw.githubusercontent.com/XaviscoZ/roblox/refs/heads/main/g%26b.lua"))()'))()
-    warn("External script loaded successfully!")
-end)
-
 local Translations = {
     ["Katchi Hub v2.1"] = "Katchi Hub v2.1",
     ["Professional Guts & BlackPowder Script Hub"] = "专业的新版与瞎子脚本中心",
@@ -126,10 +121,11 @@ local Translations = {
 local function translateText(text)
     if not text or type(text) ~= "string" then return text end
     if Translations[text] then return Translations[text] end
+    local translated = text
     for en, cn in pairs(Translations) do
-        if text:find(en) then return text:gsub(en, cn) end
+        translated = translated:gsub(en, cn)
     end
-    return text
+    return translated
 end
 
 local translatedElements = {}
@@ -137,6 +133,7 @@ local originalTexts = {}
 
 local function safeTranslateElement(element)
     if translatedElements[element] then return end
+    
     pcall(function()
         if element:IsA("TextLabel") or element:IsA("TextButton") or element:IsA("TextBox") then
             local currentText = element.Text
@@ -144,6 +141,7 @@ local function safeTranslateElement(element)
                 if not originalTexts[element] then
                     originalTexts[element] = currentText
                 end
+                
                 local translatedText = translateText(currentText)
                 if translatedText ~= currentText then
                     element.Text = translatedText
@@ -154,30 +152,78 @@ local function safeTranslateElement(element)
     end)
 end
 
-local function translateAllElements()
-    local gui = game:GetService("Players").LocalPlayer.PlayerGui
-    for _, screenGui in ipairs(gui:GetChildren()) do
-        if screenGui:IsA("ScreenGui") then
-            for _, element in ipairs(screenGui:GetDescendants()) do
-                safeTranslateElement(element)
-            end
+local function reTranslateAllUI()
+    translatedElements = {}
+    for _, gui in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+        safeTranslateElement(gui)
+    end
+    local player = game:GetService("Players").LocalPlayer
+    if player and player:FindFirstChild("PlayerGui") then
+        for _, gui in ipairs(player.PlayerGui:GetDescendants()) do
+            safeTranslateElement(gui)
         end
     end
 end
 
 local function setupSmartListener()
-    local playerGui = game:GetService("Players").LocalPlayer.PlayerGui
-    playerGui.ChildAdded:Connect(function(child)
-        if child:IsA("ScreenGui") then
-            child.DescendantAdded:Connect(safeTranslateElement)
-            for _, element in ipairs(child:GetDescendants()) do
-                safeTranslateElement(element)
+    local function onTextPropertyChanged(element)
+        if translatedElements[element] then
+            local currentText = element.Text
+            local originalText = originalTexts[element]
+            
+            if currentText == originalText or translateText(currentText) == currentText then
+                translatedElements[element] = nil
+                return
             end
+            
+            local translatedText = translateText(currentText)
+            if translatedText ~= currentText then
+                element.Text = translatedText
+            end
+        else
+            safeTranslateElement(element)
         end
-    end)
+    end
+
+    local function addSmartListener(parent)
+        for _, desc in ipairs(parent:GetDescendants()) do
+            safeTranslateElement(desc)
+        end
+        parent.DescendantAdded:Connect(function(descendant)
+            task.wait(0.3)
+            safeTranslateElement(descendant)
+            
+            if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                descendant:GetPropertyChangedSignal("Text"):Connect(function()
+                    task.wait(0.1)
+                    onTextPropertyChanged(descendant)
+                end)
+            end
+        end)
+    end
+    
+    pcall(addSmartListener, game:GetService("CoreGui"))
+    local player = game:GetService("Players").LocalPlayer
+    if player and player:FindFirstChild("PlayerGui") then
+        pcall(addSmartListener, player.PlayerGui)
+    end
 end
 
-translateAllElements()
-setupSmartListener()
+local function delayedInitialTranslate()
+    task.wait(5)
+    reTranslateAllUI()
+end
 
-warn("Translation script loaded and active.")
+task.wait(2)
+setupSmartListener()
+delayedInitialTranslate()
+
+local success, err = pcall(function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/XaviscoZ/roblox/refs/heads/main/g%26b.lua"))()
+    task.wait(1.5)
+    reTranslateAllUI()
+end)
+
+if not success then
+    warn("加载失败:", err)
+end
